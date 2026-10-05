@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buscar personas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-dark bg-primary mb-4">
+  <div class="container">
+    <span class="navbar-brand">Red Social</span>
+    <div>
+      <a class="btn btn-outline-light btn-sm" href="registro.html">Registro</a>
+      <a class="btn btn-light btn-sm active" href="busqueda.html">Buscar personas</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container" style="max-width: 640px;">
+  <h1 class="h4 mb-3">Buscar personas</h1>
+
+  <form id="formBusqueda" class="input-group mb-2" autocomplete="off">
+    <input type="search" class="form-control" id="texto" placeholder="Nombre, apellido o usuario" aria-label="Texto a buscar">
+    <button class="btn btn-primary" type="submit">Buscar</button>
+  </form>
+  <div class="form-text mb-3" id="ayuda">Escribe al menos 3 caracteres.</div>
+
+  <div id="alerta" class="alert alert-warning d-none" role="alert"></div>
+
+  <div id="resultados" class="d-none">
+    <h2 class="h6 text-muted mb-2" id="titulo">Resultados encontrados:</h2>
+    <ul class="list-group shadow-sm" id="lista"></ul>
+  </div>
+</main>
+
+<script>
+  const API = 'https://fw-examen-01-back.onrender.com';
+  const MIN = 3;
+  const form = document.getElementById('formBusqueda');
+  const input = document.getElementById('texto');
+  const alerta = document.getElementById('alerta');
+  const resultados = document.getElementById('resultados');
+  const lista = document.getElementById('lista');
+  const titulo = document.getElementById('titulo');
+  let temporizador, controlador;
+
+  function avisar(msg) {
+    alerta.textContent = msg;
+    alerta.classList.remove('d-none');
+    resultados.classList.add('d-none');
+  }
+
+  function limpiar() {
+    alerta.classList.add('d-none');
+    resultados.classList.add('d-none');
+    lista.innerHTML = '';
+  }
+
+  async function buscar() {
+    const texto = input.value.trim();
+    if (texto.length < MIN) {
+      return texto.length === 0 ? limpiar() : avisar('La búsqueda debe contener al menos 3 caracteres.');
+    }
+
+    if (controlador) controlador.abort();
+    controlador = new AbortController();
+
+    try {
+      const resp = await fetch(API + '/api/v1/usuarios/buscar?texto=' + encodeURIComponent(texto), { signal: controlador.signal });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        return avisar((err && (err.mensaje || err.message || err.error)) || 'Error al realizar la búsqueda.');
+      }
+      mostrar(await resp.json(), texto);
+    } catch (e) {
+      if (e.name !== 'AbortError') avisar('No se pudo conectar con el servidor. Si es la primera petición, espera unos segundos e intenta de nuevo.');
+    }
+  }
+
+  function mostrar(usuarios, texto) {
+    alerta.classList.add('d-none');
+    lista.innerHTML = '';
+    resultados.classList.remove('d-none');
+
+    if (!usuarios.length) {
+      titulo.textContent = 'No se encontraron personas para "' + texto + '".';
+      return;
+    }
+    titulo.textContent = 'Resultados encontrados:';
+    usuarios.forEach(u => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item';
+      const nombre = document.createElement('div');
+      nombre.className = 'fw-semibold';
+      nombre.textContent = [u.nombre, u.apellido_paterno, u.apellido_materno].filter(Boolean).join(' ');
+      const user = document.createElement('div');
+      user.className = 'text-muted small';
+      user.textContent = '@' + u.usuario;
+      li.append(nombre, user);
+      lista.appendChild(li);
+    });
+  }
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(temporizador); buscar(); });
+  input.addEventListener('input', () => { clearTimeout(temporizador); temporizador = setTimeout(buscar, 350); });
+</script>
+</body>
+</html>
