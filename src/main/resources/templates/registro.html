@@ -27,37 +27,37 @@
       <form id="formRegistro" novalidate>
         <div class="mb-3">
           <label for="nombre" class="form-label">Nombre</label>
-          <input type="text" class="form-control" id="nombre" maxlength="50">
+          <input type="text" class="form-control" id="nombre" maxlength="50" required>
         </div>
         <div class="row">
           <div class="col-md-6 mb-3">
             <label for="apellidoPaterno" class="form-label">Apellido paterno</label>
-            <input type="text" class="form-control" id="apellidoPaterno" maxlength="50">
+            <input type="text" class="form-control" id="apellidoPaterno" maxlength="50" required>
           </div>
           <div class="col-md-6 mb-3">
             <label for="apellidoMaterno" class="form-label">Apellido materno</label>
-            <input type="text" class="form-control" id="apellidoMaterno" maxlength="50">
+            <input type="text" class="form-control" id="apellidoMaterno" maxlength="50" required>
           </div>
         </div>
         <div class="mb-3">
           <label for="correo" class="form-label">Correo electrónico</label>
-          <input type="email" class="form-control" id="correo" maxlength="100">
+          <input type="email" class="form-control" id="correo" maxlength="100" required>
         </div>
         <div class="row">
           <div class="col-md-6 mb-3">
             <label for="usuario" class="form-label">Usuario</label>
-            <input type="text" class="form-control" id="usuario" maxlength="50">
+            <input type="text" class="form-control" id="usuario" maxlength="50" required>
             <div class="form-text">Mínimo 5 caracteres.</div>
           </div>
           <div class="col-md-6 mb-3">
             <label for="password" class="form-label">Contraseña</label>
-            <input type="password" class="form-control" id="password" maxlength="100">
+            <input type="password" class="form-control" id="password" maxlength="100" required>
             <div class="form-text">Mínimo 8 caracteres.</div>
           </div>
         </div>
         <div class="mb-4">
           <label for="fechaNacimiento" class="form-label">Fecha de nacimiento</label>
-          <input type="date" class="form-control" id="fechaNacimiento">
+          <input type="date" class="form-control" id="fechaNacimiento" required>
         </div>
         <button type="submit" class="btn btn-primary w-100" id="btnRegistrar">Registrar usuario</button>
       </form>
@@ -74,6 +74,7 @@
   function mostrar(tipo, mensajes) {
     alerta.className = 'alert alert-' + tipo;
     alerta.innerHTML = mensajes.map(m => '<div>' + escapar(m) + '</div>').join('');
+    alerta.classList.remove('d-none');
     alerta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
@@ -85,15 +86,43 @@
 
   function validar(d) {
     const errores = [];
+
+    // 1. Campos obligatorios
     if (Object.values(d).some(v => !v || !String(v).trim())) {
       errores.push('Todos los campos son obligatorios.');
-      return errores;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.correo)) errores.push('El correo electrónico no tiene un formato válido.');
-    if (d.usuario.trim().length < 5) errores.push('El usuario debe tener al menos 5 caracteres.');
-    if (d.password.length < 8) errores.push('La contraseña debe tener al menos 8 caracteres.');
-    const f = new Date(d.fecha_nacimiento);
-    if (isNaN(f) || f > new Date()) errores.push('La fecha de nacimiento no es válida.');
+
+    // 2. Formato de correo electrónico
+    if (d.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.correo.trim())) {
+      errores.push('El correo electrónico no tiene un formato válido.');
+    }
+
+    // 3. Longitud mínima de usuario (mínimo 5 caracteres)
+    if (d.usuario && d.usuario.trim().length < 5) {
+      errores.push('El nombre de usuario debe tener al menos 5 caracteres.');
+    }
+
+    // 4. Longitud mínima de contraseña (mínimo 8 caracteres)
+    if (d.password && d.password.length < 8) {
+      errores.push('La contraseña debe tener al menos 8 caracteres.');
+    }
+
+    // 5. Validez de la fecha de nacimiento (no futura y formato válido)
+    if (d.fecha_nacimiento) {
+      const partes = d.fecha_nacimiento.split('-');
+      if (partes.length !== 3) {
+        errores.push('La fecha de nacimiento no es válida.');
+      } else {
+        const fechaIngresada = new Date(partes[0], partes[1] - 1, partes[2]);
+        const hoy = new Date();
+        hoy.setHours(23, 59, 59, 999);
+
+        if (isNaN(fechaIngresada.getTime()) || fechaIngresada > hoy) {
+          errores.push('La fecha de nacimiento no es válida o no puede ser futura.');
+        }
+      }
+    }
+
     return errores;
   }
 
@@ -107,6 +136,8 @@
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    alerta.classList.add('d-none');
+
     const datos = {
       nombre: form.nombre.value,
       apellido_paterno: form.apellidoPaterno.value,
@@ -127,12 +158,17 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datos)
       });
+
       if (resp.ok) {
         mostrar('success', ['Usuario registrado correctamente.']);
         form.reset();
       } else {
         const data = await resp.json().catch(() => null);
-        mostrar('danger', extraerMensajes(data));
+        if (!data) {
+          mostrar('danger', ['Error en el servidor (' + resp.status + '). Revisa la consola o intenta más tarde.']);
+        } else {
+          mostrar('danger', extraerMensajes(data));
+        }
       }
     } catch (err) {
       mostrar('danger', ['No se pudo conectar con el servidor. Si es la primera petición, espera unos segundos e intenta de nuevo.']);

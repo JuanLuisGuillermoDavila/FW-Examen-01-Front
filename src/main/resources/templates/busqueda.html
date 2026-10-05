@@ -45,7 +45,8 @@
   const titulo = document.getElementById('titulo');
   let temporizador, controlador;
 
-  function avisar(msg) {
+  function avisar(msg, tipo = 'warning') {
+    alerta.className = `alert alert-${tipo}`;
     alerta.textContent = msg;
     alerta.classList.remove('d-none');
     resultados.classList.add('d-none');
@@ -57,24 +58,48 @@
     lista.innerHTML = '';
   }
 
+  function extraerMensajeError(data) {
+    if (!data) return 'Error al realizar la búsqueda.';
+    if (typeof data === 'string') return data;
+    if (data.mensaje) return data.mensaje;
+    if (data.message) return data.message;
+    if (data.error) return data.error;
+    if (Array.isArray(data.errores) && data.errores.length) return data.errores[0];
+    return 'Error al realizar la búsqueda.';
+  }
+
   async function buscar() {
     const texto = input.value.trim();
+
+    // 1. Requisito: No realizar búsquedas con menos de 3 caracteres
     if (texto.length < MIN) {
-      return texto.length === 0 ? limpiar() : avisar('La búsqueda debe contener al menos 3 caracteres.');
+      if (texto.length === 0) {
+        limpiar();
+      } else {
+        avisar('La búsqueda debe contener al menos 3 caracteres.', 'warning');
+      }
+      return;
     }
 
     if (controlador) controlador.abort();
     controlador = new AbortController();
 
     try {
-      const resp = await fetch(API + '/api/v1/usuarios/buscar?texto=' + encodeURIComponent(texto), { signal: controlador.signal });
+      const resp = await fetch(API + '/api/v1/usuarios/buscar?texto=' + encodeURIComponent(texto), {
+        signal: controlador.signal
+      });
+
       if (!resp.ok) {
         const err = await resp.json().catch(() => null);
-        return avisar((err && (err.mensaje || err.message || err.error)) || 'Error al realizar la búsqueda.');
+        return avisar(extraerMensajeError(err), 'danger');
       }
-      mostrar(await resp.json(), texto);
+
+      const usuarios = await resp.json();
+      mostrar(usuarios, texto);
     } catch (e) {
-      if (e.name !== 'AbortError') avisar('No se pudo conectar con el servidor. Si es la primera petición, espera unos segundos e intenta de nuevo.');
+      if (e.name !== 'AbortError') {
+        avisar('No se pudo conectar con el servidor. Si es la primera petición, espera unos segundos e intenta de nuevo.', 'danger');
+      }
     }
   }
 
@@ -83,27 +108,44 @@
     lista.innerHTML = '';
     resultados.classList.remove('d-none');
 
-    if (!usuarios.length) {
+    if (!Array.isArray(usuarios) || usuarios.length === 0) {
       titulo.textContent = 'No se encontraron personas para "' + texto + '".';
       return;
     }
+
     titulo.textContent = 'Resultados encontrados:';
     usuarios.forEach(u => {
       const li = document.createElement('li');
       li.className = 'list-group-item';
-      const nombre = document.createElement('div');
-      nombre.className = 'fw-semibold';
-      nombre.textContent = [u.nombre, u.apellido_paterno, u.apellido_materno].filter(Boolean).join(' ');
-      const user = document.createElement('div');
-      user.className = 'text-muted small';
-      user.textContent = '@' + u.usuario;
-      li.append(nombre, user);
+
+      // Compatibilidad con los atributos del modelo de Spring Boot
+      const apPaterno = u.apellido_paterno || u.apellidoPaterno || '';
+      const apMaterno = u.apellido_materno || u.apellidoMaterno || '';
+      const nombreCompleto = [u.nombre, apPaterno, apMaterno].filter(Boolean).join(' ');
+
+      const divNombre = document.createElement('div');
+      divNombre.className = 'fw-semibold';
+      divNombre.textContent = nombreCompleto;
+
+      const divUser = document.createElement('div');
+      divUser.className = 'text-muted small';
+      divUser.textContent = '@' + (u.usuario || '');
+
+      li.append(divNombre, divUser);
       lista.appendChild(li);
     });
   }
 
-  form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(temporizador); buscar(); });
-  input.addEventListener('input', () => { clearTimeout(temporizador); temporizador = setTimeout(buscar, 350); });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    clearTimeout(temporizador);
+    buscar();
+  });
+
+  input.addEventListener('input', () => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(buscar, 350);
+  });
 </script>
 </body>
 </html>
